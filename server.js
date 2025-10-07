@@ -14,9 +14,9 @@ app.use((req, res, next) => {
     res.setHeader('X-Frame-Options', 'DENY');
     // Basic Content Security Policy
     res.setHeader(
-        'Content-Security-Policy',
-        "default-src 'self'; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self' 'unsafe-inline';"
-    );
+    'Content-Security-Policy',
+    "default-src 'self'; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' https: data:;"
+);
     next();
 });
 
@@ -297,8 +297,7 @@ function generateHTML() {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 25px;
-  align-items: start;
-}
+  }
 
         .lecture-card { background-color: var(--card-background); border-radius: var(--border-radius); box-shadow: var(--shadow); overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; height: 100%;}
         .lecture-card:hover { transform: translateY(-8px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
