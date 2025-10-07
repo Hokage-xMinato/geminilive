@@ -37,12 +37,27 @@ let cachedData = {
 // --- Helper Functions ---
 function httpsRequest(url, options = {}) {
     return new Promise((resolve, reject) => {
-        const req = https.request(url, options, (res) => {
+        // Add a 10-second timeout to all requests for robustness.
+        const requestOptions = { ...options, timeout: 10000 };
+
+        const req = https.request(url, requestOptions, (res) => {
             let data = '';
             res.on('data', (chunk) => data += chunk);
             res.on('end', () => resolve({ data, statusCode: res.statusCode }));
         });
-        req.on('error', (err) => reject(err));
+
+        // Log the full error object for better debugging of network issues.
+        req.on('error', (err) => {
+            console.error('Internal HTTPS Request Error:', err); 
+            reject(err);
+        });
+
+        // Handle timeouts explicitly to provide a clear error message.
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timed out after 10 seconds'));
+        });
+
         if (options.body) {
             req.write(options.body);
         }
@@ -52,16 +67,21 @@ function httpsRequest(url, options = {}) {
 
 async function fetchToken() {
     try {
-        // Per your request, trying a simple GET request without custom headers first.
+        // Re-adding headers. Many servers block requests without a User-Agent.
+        // This is more likely to work than a completely header-less request.
         const response = await httpsRequest(TOKEN_URL, {
-            method: 'GET'
+            method: 'GET',
+            headers: {
+                'User-Agent': UA,
+                'Referer': REFERER
+            }
         });
 
-        // The API is returning HTML, so we check for it and log the full body for debugging.
+        // The API might be returning an HTML error page, which we need to handle.
         if (response.data.trim().startsWith('<!DOCTYPE')) {
-            console.error('Token fetch failed: Received HTML instead of JSON for token. Full HTML response below:');
+            console.error('Token fetch failed: Received HTML instead of JSON. Full HTML response below:');
             console.error(response.data);
-            throw new Error('Received HTML instead of JSON for token.');
+            throw new Error('Received HTML from token endpoint, expected JSON.');
         }
 
         const jsonData = JSON.parse(response.data);
@@ -70,9 +90,9 @@ async function fetchToken() {
         }
         throw new Error('Authentication failed: Invalid token format.');
     } catch (error) {
-        // The detailed error is logged above, this provides a cleaner summary message.
-        console.error('Token fetch failed:', error.message);
-        // We throw the error so the calling function knows it failed.
+        // This will now catch more detailed errors from httpsRequest.
+        // Using console.error(error) instead of error.message to see the full object.
+        console.error('A detailed error occurred in fetchToken:', error);
         throw error;
     }
 }
@@ -342,5 +362,6 @@ updateData();
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
 });
+
 
 
