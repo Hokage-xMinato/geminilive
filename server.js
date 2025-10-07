@@ -241,22 +241,27 @@ function generateHTML() {
     };
 
     const renderLectures = (lectures) => {
-        if (!lectures || lectures.length === 0) {
-            return '<p class="empty-state">No classes available in this category right now.</p>';
-        }
-        return lectures.map(lecture => {
-            const thumbnailUrl = lecture.thumbnail || `https://placehold.co/600x400/6a5acd/ffffff?text=${encodeURIComponent(lecture.batchName || 'Lecture')}`;
-            return `
-            <div class="lecture-card">
-                <img src="${thumbnailUrl}" alt="${lecture.lectureName || 'Lecture Thumbnail'}" class="card-thumbnail" onerror="this.src='https://placehold.co/600x400/EEE/333?text=Image+Error'">
-                <div class="card-content">
-                    <span class="batch-name">${lecture.batchName || 'General'}</span>
-                    <h3 class="lecture-name">${lecture.lectureName || lecture.name || lecture.title || 'Untitled Lecture'}</h3>
-                    ${lecture.link ? `<a href="${lecture.link}" target="_blank" class="watch-button">Watch Now</a>` : ''}
-                </div>
-            </div>`;
-        }).join('');
-    };
+        if (!lectures || lectures.length === 0) {
+            return '<p class="empty-state">No classes available in this category right now.</p>';
+        }
+        return lectures.map(lecture => {
+            const thumbnailUrl = lecture.image || `https://placehold.co/600x400/6a5acd/ffffff?text=${encodeURIComponent(lecture.title || 'Lecture')}`;
+            
+            // Create the new, full player link
+            const playerLink = lecture.link ? `https://studysmarterx.netlify.app/player?url=${lecture.link}` : null;
+
+            return `
+            <div class="lecture-card">
+                <img src="${thumbnailUrl}" alt="${lecture.title || 'Lecture Thumbnail'}" class="card-thumbnail" onerror="this.src='https://placehold.co/600x400/EEE/333?text=Image+Error'">
+                <div class="card-content">
+                    <span class="batch-name">${lecture.batch || 'General'}</span>
+                    <h3 class="lecture-name">${lecture.title || 'Untitled Lecture'}</h3>
+                        {/* UPDATED: Use the new playerLink variable for the href */}
+                    ${playerLink ? `<a href="${playerLink}" target="_blank" class="watch-button">Watch Now</a>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    };
 
     // The entire HTML, CSS, and JS is now in one template string
     return `
