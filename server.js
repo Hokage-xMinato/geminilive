@@ -52,13 +52,15 @@ function httpsRequest(url, options = {}) {
 
 async function fetchToken() {
     try {
+        // Per your request, trying a simple GET request without custom headers first.
         const response = await httpsRequest(TOKEN_URL, {
-            method: 'GET',
-            headers: { 'User-Agent': UA, 'Referer': REFERER }
+            method: 'GET'
         });
 
-        // The API is returning HTML, so we check for it.
+        // The API is returning HTML, so we check for it and log the full body for debugging.
         if (response.data.trim().startsWith('<!DOCTYPE')) {
+            console.error('Token fetch failed: Received HTML instead of JSON for token. Full HTML response below:');
+            console.error(response.data);
             throw new Error('Received HTML instead of JSON for token.');
         }
 
@@ -68,6 +70,7 @@ async function fetchToken() {
         }
         throw new Error('Authentication failed: Invalid token format.');
     } catch (error) {
+        // The detailed error is logged above, this provides a cleaner summary message.
         console.error('Token fetch failed:', error.message);
         // We throw the error so the calling function knows it failed.
         throw error;
@@ -339,4 +342,5 @@ updateData();
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
 });
+
 
