@@ -1,0 +1,26 @@
+{
+  "name": "smartrz-lectures",
+  "version": "1.0.0",
+  "description": "A web application to display live, upcoming, and recorded lectures.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "express",
+    "nodejs",
+    "render"
+  ],
+  "author": "Smartrz",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-cron": "^3.0.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
