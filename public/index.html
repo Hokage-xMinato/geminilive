@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smartrz - Live Lectures</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      // Frame-busting script
+      if (window.top !== window.self) {
+        window.top.location.replace(window.self.location.href);
+      }
+    </script>
+</head>
+<body>
+    <div class="watermark">Smartrz</div>
+    <header class="header">
+        <div class="container header-content">
+            <h1 class="logo">Smartrz</h1>
+            <div class="header-info">
+                <p>Proudly made by Smartrz</p>
+                <p id="last-updated">Last updated: Just now</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="live-classes" class="lecture-section">
+            <h2 class="section-title"><span class="live-dot"></span> Live Classes</h2>
+            <div class="lecture-grid" id="live-grid">
+                <!-- Skeletons for loading state -->
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+            </div>
+        </section>
+
+        <section id="upcoming-classes" class="lecture-section">
+            <h2 class="section-title">Upcoming Classes</h2>
+            <div class="lecture-grid" id="upcoming-grid">
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+            </div>
+        </section>
+
+        <section id="recorded-classes" class="lecture-section">
+            <h2 class="section-title">Recorded Classes</h2>
+            <div class="lecture-grid" id="recorded-grid">
+                 <div class="skeleton-card"></div>
+                 <div class="skeleton-card"></div>
+                 <div class="skeleton-card"></div>
+                 <div class="skeleton-card"></div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Smartrz. All rights reserved.</p>
+            <a href="https://t.me/studysmarterhub" target="_blank">Join our Telegram Channel</a>
+        </div>
+    </footer>
+
+    <!-- Telegram Popup -->
+    <div id="telegram-popup" class="popup-overlay">
+        <div class="popup-content">
+            <button id="close-popup" class="close-btn">&times;</button>
+            <h2>Join Our Community!</h2>
+            <p>Get the latest updates, notes, and interact with fellow students on our Telegram channel.</p>
+            <a href="https://t.me/studysmarterhub" id="join-telegram-btn" class="telegram-btn" target="_blank">Join Now</a>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
