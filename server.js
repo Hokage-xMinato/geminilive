@@ -2,6 +2,7 @@ const express = require('express');
 const cron = require('node-cron');
 const https = require('https');
 const path = require('path');
+const zlib = require('zlib');
 
 const app = express();
 // Render sets the PORT environment variable.
@@ -56,20 +57,49 @@ let cachedData = {
 };
 
 // --- Helper Functions ---
+// --- Helper Functions ---
 function httpsRequest(url, options = {}) {
     return new Promise((resolve, reject) => {
         // Add a 10-second timeout to all requests for robustness.
         const requestOptions = { ...options, timeout: 10000 };
 
         const req = https.request(url, requestOptions, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => resolve({ data, statusCode: res.statusCode }));
+            const body = [];
+            const contentEncoding = res.headers['content-encoding'];
+
+            // Choose the correct decompression stream based on the header
+            let responseStream;
+            if (contentEncoding === 'gzip') {
+                responseStream = res.pipe(zlib.createGunzip());
+            } else if (contentEncoding === 'br') {
+                responseStream = res.pipe(zlib.createBrotliDecompress());
+            } else if (contentEncoding === 'deflate') {
+                responseStream = res.pipe(zlib.createInflate());
+            } else {
+                // If no compression, use the original response stream
+                responseStream = res;
+            }
+
+            responseStream.on('data', (chunk) => body.push(chunk));
+
+            responseStream.on('end', () => {
+                try {
+                    const data = Buffer.concat(body).toString();
+                    resolve({ data, statusCode: res.statusCode });
+                } catch (e) {
+                    reject(e);
+                }
+            });
+            
+            responseStream.on('error', (err) => {
+                console.error('Error during response stream processing (decompression failed):', err);
+                reject(err);
+            });
         });
 
         // Log the full error object for better debugging of network issues.
         req.on('error', (err) => {
-            console.error('Internal HTTPS Request Error:', err); 
+            console.error('Internal HTTPS Request Error:', err);
             reject(err);
         });
 
