@@ -256,7 +256,7 @@ function generateHTML() {
                 <div class="card-content">
                     <span class="batch-name">${lecture.batch || 'General'}</span>
                     <h3 class="lecture-name">${lecture.title || 'Untitled Lecture'}</h3>
-                        {/* UPDATED: Use the new playerLink variable for the href */}
+                        
                     ${playerLink ? `<a href="${playerLink}" target="_blank" class="watch-button">Watch Now</a>` : ''}
                 </div>
             </div>`;
@@ -293,8 +293,14 @@ function generateHTML() {
         .section-title { font-size: 2.2rem; font-weight: 700; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 3px solid var(--primary-color); display: inline-flex; align-items: center; gap: 10px; }
         .live-dot { width: 15px; height: 15px; background-color: #ff4d4d; border-radius: 50%; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); } 100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); } }
-        .lecture-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; }
-        .lecture-card { background-color: var(--card-background); border-radius: var(--border-radius); box-shadow: var(--shadow); overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; }
+        .lecture-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 25px;
+  align-items: start;
+}
+
+        .lecture-card { background-color: var(--card-background); border-radius: var(--border-radius); box-shadow: var(--shadow); overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; height: 100%;}
         .lecture-card:hover { transform: translateY(-8px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
         .card-thumbnail { width: 100%; height: 170px; object-fit: cover; background-color: #eee; }
         .card-content { padding: 20px; display: flex; flex-direction: column; flex-grow: 1; }
