@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: smartrz-lecture-platform
+    env: node
+    plan: free # Or your desired plan
+    buildCommand: 'npm install'
+    startCommand: 'npm start'
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # You can add your API URLs as environment variables here for better security
+      # - key: TOKEN_URL
+      #   value: 'https://rolexcoderz.in/api/get-token'
+      # - key: CONTENT_URL
+      #   value: 'https://rolexcoderz.in/api/get-live-classes'
