@@ -21,10 +21,31 @@ app.use((req, res, next) => {
 
 
 // --- API Configuration ---
-const TOKEN_URL = process.env.TOKEN_URL || 'https://rolexcoderz.in/api/get-token';
-const CONTENT_URL = process.env.CONTENT_URL || 'https://rolexcoderz.in/api/get-live-classes';
+// We use the IP address directly to bypass DNS issues on the server.
+const API_IP = '104.21.38.230';
+const TOKEN_URL = process.env.TOKEN_URL || `https://${API_IP}/api/get-token`;
+const CONTENT_URL = process.env.CONTENT_URL || `https://${API_IP}/api/get-live-classes`;
 const UA = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36';
+// The Referer should still use the domain name.
 const REFERER = 'https://rolexcoderz.in/live-classes';
+
+// --- Enhanced Browser-like Headers ---
+// To better mimic a real user and avoid bot detection, we add more headers.
+const BROWSER_HEADERS = {
+    // CRITICAL FIX: The 'Host' header tells the server which domain we want,
+    // allowing the SSL/TLS certificate to match even when we connect via IP.
+    'Host': 'rolexcoderz.in',
+    'User-Agent': UA,
+    'Referer': REFERER,
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'DNT': '1', // Do Not Track
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin',
+};
 
 // --- In-Memory Cache ---
 let cachedData = {
@@ -67,14 +88,11 @@ function httpsRequest(url, options = {}) {
 
 async function fetchToken() {
     try {
-        // Re-adding headers. Many servers block requests without a User-Agent.
-        // This is more likely to work than a completely header-less request.
+        // Using a full set of browser-like headers to appear as a legitimate user.
+        // This helps get past security measures like Cloudflare.
         const response = await httpsRequest(TOKEN_URL, {
             method: 'GET',
-            headers: {
-                'User-Agent': UA,
-                'Referer': REFERER
-            }
+            headers: BROWSER_HEADERS
         });
 
         // The API might be returning an HTML error page, which we need to handle.
@@ -103,12 +121,11 @@ async function fetchContent(type, timestamp, signature) {
         const response = await httpsRequest(CONTENT_URL, {
             method: 'POST',
             headers: {
+                ...BROWSER_HEADERS, // Spread the common browser headers
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(payload),
                 'x-timestamp': timestamp.toString(),
                 'x-signature': signature,
-                'User-Agent': UA,
-                'Referer': REFERER
             },
             body: payload
         });
@@ -362,6 +379,8 @@ updateData();
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
 });
+
+
 
 
 
