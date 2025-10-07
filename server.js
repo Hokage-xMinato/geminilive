@@ -15,8 +15,9 @@ app.use((req, res, next) => {
     // Basic Content Security Policy
     res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' https: data:;"
+    "default-src 'self'; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com; img-src 'self' https: data:;"
 );
+
     next();
 });
 
