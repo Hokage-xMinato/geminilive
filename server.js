@@ -292,7 +292,7 @@ const updateCache = async () => {
             fetchApiData('Live/?get=live'),
             fetchApiData('Live/?get=up'),
             fetchApiData('Live/?get=completed'),
-            fetchApiData('?get=notifications')
+            fetchApiData('Live/?get=notifications')
         ]);
 
         cachedHtml = buildFullHtmlPage(live, up, completed, notifications);
