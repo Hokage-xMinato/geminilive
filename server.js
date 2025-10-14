@@ -1,436 +1,315 @@
 const express = require('express');
-const cron = require('node-cron');
-const https = require('https');
-const path = require('path');
-const zlib = require('zlib');
+const fetch = require('node-fetch');
 
 const app = express();
-// Render sets the PORT environment variable.
 const PORT = process.env.PORT || 10000;
 
-// --- Security Middleware (Manual Headers) ---
-app.use((req, res, next) => {
-    // Prevents the site from being embedded in an iframe
-    res.setHeader('X-Frame-Options', 'DENY');
-    // Basic Content Security Policy
-    res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self'; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com; img-src 'self' https: data:;"
-);
+// This will hold the complete, pre-generated HTML page.
+let cachedHtml = '<!DOCTYPE html><html><head><title>Study Smarterz</title><style>body{display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background-color:#f8fafc;color:#475569;} .spinner {width: 56px;height: 56px;border-radius: 50%;padding: 6px;background: conic-gradient(from 180deg at 50% 50%, rgba(255, 255, 255, 0) 0deg, #4f46e5 360deg);animation: spin 1s linear infinite;} .spinner::before {content: "";display: block;width: 100%;height: 100%;border-radius: 50%;background: #f8fafc;} @keyframes spin {to {transform: rotate(1turn);}}</style></head><body><div class="spinner"></div><p style="margin-left: 16px; font-size: 1.25rem;">Loading live classes, please wait...</p></body></html>';
 
-    next();
-});
-
-
-// --- API Configuration ---
-// We use the IP address directly to bypass DNS issues on the server.
-const API_IP = '104.21.38.230';
-const TOKEN_URL = process.env.TOKEN_URL || `https://${API_IP}/api/get-token`;
-const CONTENT_URL = process.env.CONTENT_URL || `https://${API_IP}/api/get-live-classes`;
-const UA = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36';
-// The Referer should still use the domain name.
-const REFERER = 'https://rolexcoderz.in/live-classes';
-
-// --- Enhanced Browser-like Headers ---
-// To better mimic a real user and avoid bot detection, we add more headers.
-const BROWSER_HEADERS = {
-    // CRITICAL FIX: The 'Host' header tells the server which domain we want,
-    // allowing the SSL/TLS certificate to match even when we connect via IP.
-    'Host': 'rolexcoderz.in',
-    'User-Agent': UA,
-    'Referer': REFERER,
-    'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'DNT': '1', // Do Not Track
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'same-origin',
+/**
+ * UTILITY FUNCTIONS
+ * These are helper functions moved from the original HTML file.
+ */
+const textReplacer = (text) => {
+    if (typeof text !== 'string') return text;
+    // Strict replacement for "rolexcoderz", "rolex", and "coderz"
+    return text.replace(/rolexcoderz/gi, 'studysmarterz')
+               .replace(/rolex/gi, 'study')
+               .replace(/coderz/gi, 'smarter');
 };
 
-// --- In-Memory Cache ---
-let cachedData = {
-    live: [],
-    up: [],
-    completed: [],
-    lastUpdated: null
+const fetchApiData = async (endpoint) => {
+    const url = `https://api.rolexcoderz.live/${endpoint}`;
+    try {
+        const response = await fetch(url, { timeout: 10000 });
+        if (!response.ok) {
+            console.error(`HTTP error for ${url}: ${response.status}`);
+            return [];
+        }
+        const json = await response.json();
+        return json.data || [];
+    } catch (error) {
+        console.error(`Failed to fetch data from ${url}:`, error.message);
+        return [];
+    }
 };
 
-// --- Helper Functions ---
-// --- Helper Functions ---
-function httpsRequest(url, options = {}) {
-    return new Promise((resolve, reject) => {
-        // Add a 10-second timeout to all requests for robustness.
-        const requestOptions = { ...options, timeout: 10000 };
 
-        const req = https.request(url, requestOptions, (res) => {
-            const body = [];
-            const contentEncoding = res.headers['content-encoding'];
+/**
+ * HTML RENDERING FUNCTIONS
+ * These functions build the dynamic parts of the HTML.
+ */
+const renderLectureCards = (data) => {
+    if (!data || data.length === 0) {
+        return '';
+    }
+    return data.map(item => {
+        const title = textReplacer(item.title);
+        const batch = textReplacer(item.batch);
 
-            // Choose the correct decompression stream based on the header
-            let responseStream;
-            if (contentEncoding === 'gzip') {
-                responseStream = res.pipe(zlib.createGunzip());
-            } else if (contentEncoding === 'br') {
-                responseStream = res.pipe(zlib.createBrotliDecompress());
-            } else if (contentEncoding === 'deflate') {
-                responseStream = res.pipe(zlib.createInflate());
-            } else {
-                // If no compression, use the original response stream
-                responseStream = res;
-            }
-
-            responseStream.on('data', (chunk) => body.push(chunk));
-
-            responseStream.on('end', () => {
-                try {
-                    const data = Buffer.concat(body).toString();
-                    resolve({ data, statusCode: res.statusCode });
-                } catch (e) {
-                    reject(e);
+        let imageHtml = '';
+        let isImageValid = false;
+        if (item.image) {
+            try {
+                const imageUrl = new URL(item.image);
+                if (imageUrl.hostname.endsWith('cloudfront.net')) {
+                    isImageValid = true;
+                    imageHtml = `<img src="${item.image}" alt="${title}" class="h-40 w-full object-cover" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML = '<div class=\'h-40 w-full bg-slate-200 flex items-center justify-center p-4 text-center font-semibold text-slate-600\'>${title}</div>';">`;
                 }
-            });
-            
-            responseStream.on('error', (err) => {
-                console.error('Error during response stream processing (decompression failed):', err);
-                reject(err);
-            });
-        });
-
-        // Log the full error object for better debugging of network issues.
-        req.on('error', (err) => {
-            console.error('Internal HTTPS Request Error:', err);
-            reject(err);
-        });
-
-        // Handle timeouts explicitly to provide a clear error message.
-        req.on('timeout', () => {
-            req.destroy();
-            reject(new Error('Request timed out after 10 seconds'));
-        });
-
-        if (options.body) {
-            req.write(options.body);
+            } catch (e) { /* Invalid URL */ }
         }
-        req.end();
-    });
-}
-
-async function fetchToken() {
-    try {
-        // Using a full set of browser-like headers to appear as a legitimate user.
-        // This helps get past security measures like Cloudflare.
-        const response = await httpsRequest(TOKEN_URL, {
-            method: 'GET',
-            headers: BROWSER_HEADERS
-        });
-
-        // The API might be returning an HTML error page, which we need to handle.
-        if (response.data.trim().startsWith('<!DOCTYPE')) {
-            console.error('Token fetch failed: Received HTML instead of JSON. Full HTML response below:');
-            console.error(response.data);
-            throw new Error('Received HTML from token endpoint, expected JSON.');
+        if (!isImageValid) {
+            imageHtml = `<div class="h-40 w-full bg-slate-200 flex items-center justify-center p-4 text-center font-semibold text-slate-600">${title}</div>`;
         }
 
-        const jsonData = JSON.parse(response.data);
-        if (jsonData.timestamp && jsonData.signature) {
-            return jsonData;
+        let finalLink = null;
+        if (item.link) {
+            try {
+                const linkUrl = new URL(item.link);
+                const playerUrlParam = linkUrl.searchParams.get('url');
+                if (playerUrlParam) {
+                    const cdnUrl = new URL(playerUrlParam);
+                    if (cdnUrl.hostname.endsWith('cloudfront.net')) {
+                        finalLink = `https://studysmarterx.netlify.app/player/?url=${encodeURIComponent(playerUrlParam)}`;
+                    }
+                }
+            } catch (e) { /* Invalid URL */ }
         }
-        throw new Error('Authentication failed: Invalid token format.');
-    } catch (error) {
-        // This will now catch more detailed errors from httpsRequest.
-        // Using console.error(error) instead of error.message to see the full object.
-        console.error('A detailed error occurred in fetchToken:', error);
-        throw error;
+
+        const cardContent = `
+            <div class="bg-white rounded-lg shadow-md overflow-hidden flex flex-col h-full relative group lecture-card" data-batch="${item.batch}">
+                <span class="absolute top-2 right-2 bg-indigo-500 text-white text-xs font-semibold px-2.5 py-1 rounded-full z-10">${batch}</span>
+                ${imageHtml}
+                <div class="p-4 flex flex-col flex-grow">
+                    <h3 class="text-base font-semibold text-slate-800 flex-grow">${title}</h3>
+                </div>
+            </div>
+        `;
+
+        return finalLink
+            ? `<a href="${finalLink}" target="_blank" rel="noopener noreferrer" class="block transition-transform duration-200 hover:-translate-y-1">${cardContent}</a>`
+            : `<div class="transition-transform duration-200">${cardContent}</div>`;
+    }).join('');
+};
+
+const renderNotifications = (notifications) => {
+    if (!notifications || notifications.length === 0) {
+        return `<p class="text-slate-500 text-center py-10">No new notifications.</p>`;
     }
-}
+    return notifications.map(notif => {
+        const title = textReplacer(notif.title);
+        const message = textReplacer(notif.message);
+        return `
+            <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <p class="font-semibold text-slate-800">${title}</p>
+                <p class="text-sm text-slate-600">${message}</p>
+            </div>
+        `;
+    }).join('');
+};
 
-async function fetchContent(type, timestamp, signature) {
-    try {
-        const payload = JSON.stringify({ type });
-        const response = await httpsRequest(CONTENT_URL, {
-            method: 'POST',
-            headers: {
-                ...BROWSER_HEADERS, // Spread the common browser headers
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(payload),
-                'x-timestamp': timestamp.toString(),
-                'x-signature': signature,
-            },
-            body: payload
-        });
+const renderBatchOptions = (live, up, completed) => {
+    const allData = [...live, ...up, ...completed];
+    const batches = ['all', ...new Set(allData.map(item => item.batch))];
+    return batches.map(batch =>
+        `<option value="${batch}">${batch === 'all' ? 'All Batches' : textReplacer(batch)}</option>`
+    ).join('');
+};
 
-        let jsonData;
-        try {
-            jsonData = JSON.parse(response.data);
-        } catch (parseError) {
-             console.error(`Invalid JSON for type '${type}':`, response.data);
-             throw new Error(`Received invalid response format for ${type}.`);
-        }
+/**
+ * MAIN PAGE TEMPLATE
+ * This function generates the entire HTML page with the fetched data.
+ */
+const buildFullHtmlPage = (live, up, completed, notifications) => {
+    const liveCards = renderLectureCards(live);
+    const upCards = renderLectureCards(up);
+    const completedCards = renderLectureCards(completed);
+    const notificationItems = renderNotifications(notifications);
+    const batchOptions = renderBatchOptions(live, up, completed);
 
-        if (!jsonData.data) {
-            return []; // No content available, but not an error.
-        }
-
-        const decodedData = Buffer.from(jsonData.data, 'base64').toString('utf-8');
-        let parsedData = JSON.parse(decodedData);
-
-        // API sometimes wraps the data in another "data" property
-        if (parsedData?.data && Array.isArray(parsedData.data)) {
-            parsedData = parsedData.data;
-        }
-
-        return modifyContent(parsedData);
-
-    } catch (error) {
-        console.error(`Failed to fetch content for '${type}':`, error.message);
-        return []; // Return an empty array on failure.
-    }
-}
-
-function modifyContent(data) {
-    if (!data || !Array.isArray(data)) return [];
-    let jsonString = JSON.stringify(data);
-    jsonString = jsonString.replace(/https:\/\/www\.rolexcoderz\.xyz\/Player\/\?url=/gi, '');
-    jsonString = jsonString.replace(/rolex coderz|rolexcoderz\.xyz|rolexcoderz/gi, 'Smartrz');
-    return JSON.parse(jsonString);
-}
-
-
-async function updateData() {
-    console.log('Updating classes data...');
-    let token;
-    try {
-        token = await fetchToken();
-    } catch (error) {
-        console.error('Halting update process because token could not be fetched.');
-        // Don't clear old data if token fails, just keep what we have.
-        return;
-    }
-
-    const [liveData, upData, completedData] = await Promise.all([
-        fetchContent('live', token.timestamp, token.signature),
-        fetchContent('up', token.timestamp, token.signature),
-        fetchContent('completed', token.timestamp, token.signature)
-    ]);
-
-    // Only update if the data is a valid array
-    if(Array.isArray(liveData)) cachedData.live = liveData;
-    if(Array.isArray(upData)) cachedData.up = upData;
-    if(Array.isArray(completedData)) cachedData.completed = completedData;
-    
-    cachedData.lastUpdated = new Date();
-
-    console.log(`Update complete - Live: ${cachedData.live.length}, Upcoming: ${cachedData.up.length}, Completed: ${cachedData.completed.length}`);
-}
-
-
-// --- HTML Generation ---
-function generateHTML() {
-    const { live, up, completed, lastUpdated } = cachedData;
-
-    const timeSince = (date) => {
-        if (!date) return "never";
-        const seconds = Math.floor((new Date() - date) / 1000);
-        let interval = seconds / 60;
-        if (interval < 1) return "Just now";
-        if (interval < 60) return Math.floor(interval) + " minutes ago";
-        interval = interval / 60;
-        if (interval < 24) return Math.floor(interval) + " hours ago";
-        return date.toLocaleString();
-    };
-
-    const renderLectures = (lectures) => {
-        if (!lectures || lectures.length === 0) {
-            return '<p class="empty-state">No classes available in this category right now.</p>';
-        }
-        return lectures.map(lecture => {
-            const thumbnailUrl = lecture.image || `https://placehold.co/600x400/6a5acd/ffffff?text=${encodeURIComponent(lecture.title || 'Lecture')}`;
-            
-            // Create the new, full player link
-            const playerLink = lecture.link ? `https://studysmarterx.netlify.app/player?url=${lecture.link}` : null;
-
-            return `
-            <div class="lecture-card">
-                <img src="${thumbnailUrl}" alt="${lecture.title || 'Lecture Thumbnail'}" class="card-thumbnail" onerror="this.src='https://placehold.co/600x400/EEE/333?text=Image+Error'">
-                <div class="card-content">
-                    <span class="batch-name">${lecture.batch || 'General'}</span>
-                    <h3 class="lecture-name">${lecture.title || 'Untitled Lecture'}</h3>
-                        
-                    ${playerLink ? `<a href="${playerLink}" target="_blank" class="watch-button">Watch Now</a>` : ''}
-                </div>
-            </div>`;
-        }).join('');
-    };
-
-    // The entire HTML, CSS, and JS is now in one template string
     return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smartrz - Live Lectures</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-E7FMZ2D4HH"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-E7FMZ2D4HH');
-</script>
+    <title>Study Smarterz - Live Classes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #6a5acd; --secondary-color: #483d8b; --background-color: #f4f7f6;
-            --card-background: #ffffff; --text-color: #333; --light-text-color: #f8f9fa;
-            --border-color: #e0e0e0; --shadow: 0 10px 30px rgba(0, 0, 0, 0.07); --border-radius: 12px;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background-color: var(--background-color); color: var(--text-color); line-height: 1.6; position: relative; overflow-x: hidden; }
-        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 15vw; color: rgba(0, 0, 0, 0.04); font-weight: 800; z-index: -1; pointer-events: none; text-transform: uppercase; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
-        .header { background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)); color: var(--light-text-color); padding: 20px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 1000; }
-        .header-content { display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-size: 2rem; font-weight: 800; }
-        .header-info { text-align: right; font-size: 0.9rem; opacity: 0.9; }
-        main { padding: 40px 0; }
-        .lecture-section { margin-bottom: 50px; }
-        .section-title { font-size: 2.2rem; font-weight: 700; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 3px solid var(--primary-color); display: inline-flex; align-items: center; gap: 10px; }
-        .live-dot { width: 15px; height: 15px; background-color: #ff4d4d; border-radius: 50%; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); } 100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); } }
-        .lecture-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 25px;
-  }
-
-        .lecture-card { background-color: var(--card-background); border-radius: var(--border-radius); box-shadow: var(--shadow); overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; height: 100%;}
-        .lecture-card:hover { transform: translateY(-8px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
-        .card-thumbnail { width: 100%; height: 170px; object-fit: cover; background-color: #eee; }
-        .card-content { padding: 20px; display: flex; flex-direction: column; flex-grow: 1; }
-        .batch-name { font-size: 0.8rem; font-weight: 600; color: var(--primary-color); text-transform: uppercase; margin-bottom: 8px; }
-        .lecture-name { font-size: 1.2rem; font-weight: 600; margin-bottom: 15px; flex-grow: 1; }
-        .watch-button { display: block; width: 100%; padding: 12px; background: var(--primary-color); color: var(--light-text-color); text-align: center; text-decoration: none; border-radius: 8px; font-weight: 600; transition: background-color 0.3s ease; margin-top: auto; }
-        .watch-button:hover { background-color: var(--secondary-color); }
-        .empty-state { grid-column: 1 / -1; text-align: center; padding: 50px; background: var(--card-background); border-radius: var(--border-radius); color: #888; }
-        .footer { background-color: #333; color: var(--light-text-color); padding: 25px 0; text-align: center; }
-        .footer a { color: var(--primary-color); text-decoration: none; font-weight: 600; }
-        .footer a:hover { text-decoration: underline; }
-        .popup-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
-        .popup-overlay.show { opacity: 1; visibility: visible; }
-        .popup-content { background-color: var(--card-background); padding: 40px; border-radius: var(--border-radius); text-align: center; max-width: 450px; width: 90%; position: relative; transform: scale(0.9); transition: transform 0.3s ease; }
-        .popup-overlay.show .popup-content { transform: scale(1); }
-        .close-btn { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #aaa; }
-        .popup-content h2 { margin-bottom: 15px; color: var(--primary-color); }
-        .popup-content p { margin-bottom: 25px; color: #555; }
-        .telegram-btn { display: inline-block; padding: 12px 30px; background-color: var(--primary-color); color: var(--light-text-color); text-decoration: none; border-radius: 8px; font-weight: 600; transition: background-color 0.3s; }
-        .telegram-btn:hover { background-color: var(--secondary-color); }
-        @media (max-width: 768px) { .header-content { flex-direction: column; gap: 10px; } .header-info { text-align: center; } }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .tab-active { border-color: #4f46e5; color: #4f46e5; font-weight: 600; }
+        .notification-panel { transition: transform 0.3s ease-in-out; }
     </style>
 </head>
-<body>
-    <div class="watermark">Smartrz</div>
-    <header class="header">
-        <div class="container header-content">
-            <h1 class="logo">Smartrz</h1>
-            <div class="header-info">
-                <p>Proudly made by Smartrz</p>
-                <p id="last-updated">Last updated: ${timeSince(lastUpdated)}</p>
-            </div>
-        </div>
-    </header>
-    <main class="container">
-        <section class="lecture-section">
-            <h2 class="section-title"><span class="live-dot"></span> Live Classes</h2>
-            <div class="lecture-grid">${renderLectures(live)}</div>
-        </section>
-        <section class="lecture-section">
-            <h2 class="section-title">Upcoming Classes</h2>
-            <div class="lecture-grid">${renderLectures(up)}</div>
-        </section>
-        <section class="lecture-section">
-            <h2 class="section-title">Recorded Classes</h2>
-            <div class="lecture-grid">${renderLectures(completed)}</div>
-        </section>
-    </main>
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; ${new Date().getFullYear()} Smartrz. All rights reserved.</p>
-            <a href="https://t.me/studysmarterhub" target="_blank">Join our Telegram Channel</a>
-        </div>
-    </footer>
-    <div id="telegram-popup" class="popup-overlay">
-        <div class="popup-content">
-            <button id="close-popup" class="close-btn">&times;</button>
-            <h2>Join Our Community!</h2>
-            <p>Get the latest updates, notes, and interact with fellow students on our Telegram channel.</p>
-            <a href="https://t.me/studysmarterhub" id="join-telegram-btn" class="telegram-btn" target="_blank">Join Now</a>
-        </div>
-    </div>
+<body class="text-slate-800">
+    <!-- Frame Buster Script -->
     <script>
-        // Frame-busting script
-        if (window.top !== window.self) {
-            window.top.location.replace(window.self.location.href);
-        }
+        if (window.top !== window.self) { try { window.top.location = window.self.location; } catch (e) { console.error("Frame-busting failed:", e); } }
+    </script>
 
-        // Auto-refresh the page every 60 seconds to get new data
-        setTimeout(() => { window.location.reload(); }, 60000);
+    <div id="app-container" class="min-h-screen">
+        <header class="bg-white/80 backdrop-blur-lg sticky top-0 z-30 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex-shrink-0"><h1 class="text-2xl font-bold text-indigo-600">Study Smarterz</h1></div>
+                    <div class="relative">
+                        <button id="notification-btn" class="p-2 rounded-full text-slate-500 hover:bg-slate-100"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg></button>
+                    </div>
+                </div>
+            </div>
+        </header>
 
-        // Popup Logic
+        <div id="notification-panel" class="notification-panel fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-lg z-50 transform translate-x-full">
+            <div class="flex items-center justify-between p-4 border-b">
+                <h2 class="text-lg font-semibold">Notifications</h2>
+                <button id="close-notification-btn" class="p-2 rounded-full hover:bg-slate-100"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+            <div class="overflow-y-auto h-[calc(100vh-65px)] p-4 space-y-3">${notificationItems}</div>
+        </div>
+        <div id="notification-overlay" class="fixed inset-0 bg-black/30 z-40 hidden"></div>
+
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="border-b border-slate-200">
+                <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                    <button data-tab="live" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm tab-active">Live</button>
+                    <button data-tab="up" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-slate-500 hover:text-slate-700">Upcoming</button>
+                    <button data-tab="completed" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-slate-500 hover:text-slate-700">Recorded</button>
+                </nav>
+            </div>
+            <div class="mt-6">
+                <select id="batch-filter" class="block w-full max-w-xs pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">${batchOptions}</select>
+            </div>
+            
+            <div id="content-area">
+                <div id="live-content" class="content-panel mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">${liveCards}</div>
+                <div id="up-content" class="content-panel mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 hidden">${upCards}</div>
+                <div id="completed-content" class="content-panel mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 hidden">${completedCards}</div>
+            </div>
+            <div id="empty-state" class="text-center py-20 hidden"><h3 class="mt-2 text-sm font-medium text-slate-900">No Lectures Found</h3></div>
+        </main>
+        
+        <footer class="bg-white border-t mt-12"><div class="max-w-7xl mx-auto py-6 px-4 text-center text-sm text-slate-500"><p>&copy; ${new Date().getFullYear()} Study Smarterz. All rights reserved.</p><a href="https://t.me/studysmarterhub" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:text-indigo-800 font-medium mt-2 inline-block">Join our Telegram Channel</a></div></footer>
+    </div>
+
+    <div id="telegram-popup" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div id="popup-content" class="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 text-center transform transition-all scale-95 opacity-0"><h3 class="text-lg font-medium text-slate-900 mt-4">Join Our Community!</h3><p class="text-sm text-slate-500 mt-2">Stay updated with the latest classes, notes, and announcements.</p><div class="mt-5 space-y-3"><a href="https://t.me/studysmarterhub" target="_blank" class="inline-flex justify-center w-full rounded-md shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700">Join Telegram</a><button type="button" id="close-popup-btn" class="inline-flex justify-center w-full rounded-md border border-slate-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-slate-700 hover:bg-slate-50">Maybe Later</button></div></div></div>
+
+    <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const telegramPopup = document.getElementById('telegram-popup');
-            const closePopupButton = document.getElementById('close-popup');
-            const joinTelegramBtn = document.getElementById('join-telegram-btn');
+            // Client-side interactivity script
+            const tabs = document.querySelectorAll('.tab-btn');
+            const contentPanels = document.querySelectorAll('.content-panel');
+            const batchFilter = document.getElementById('batch-filter');
+            const emptyState = document.getElementById('empty-state');
+            let activeTab = 'live';
 
-            const showPopup = () => {
-                if (!sessionStorage.getItem('telegramPopupShown')) {
-                    setTimeout(() => { telegramPopup.classList.add('show'); }, 1500);
-                }
-            };
-            const hidePopup = () => {
-                telegramPopup.classList.remove('show');
-                sessionStorage.setItem('telegramPopupShown', 'true');
-            };
+            function filterContent() {
+                const selectedBatch = batchFilter.value;
+                const activePanel = document.getElementById(activeTab + '-content');
+                const cards = activePanel.querySelectorAll('a, div.transition-transform');
+                let visibleCount = 0;
+                cards.forEach(card => {
+                    const cardElement = card.querySelector('.lecture-card');
+                    if (selectedBatch === 'all' || cardElement.dataset.batch === selectedBatch) {
+                        card.style.display = 'block';
+                        visibleCount++;
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+                emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+            }
 
-            closePopupButton.addEventListener('click', hidePopup);
-            joinTelegramBtn.addEventListener('click', hidePopup);
-            telegramPopup.addEventListener('click', (e) => {
-                if (e.target === telegramPopup) hidePopup();
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    activeTab = tab.dataset.tab;
+                    tabs.forEach(t => t.classList.remove('tab-active', 'text-slate-500', 'hover:text-slate-700', 'border-transparent'));
+                    tabs.forEach(t => {
+                        if (t.dataset.tab === activeTab) {
+                            t.classList.add('tab-active');
+                        } else {
+                            t.classList.add('text-slate-500', 'hover:text-slate-700', 'border-transparent');
+                        }
+                    });
+                    contentPanels.forEach(panel => {
+                        panel.id === activeTab + '-content' ? panel.classList.remove('hidden') : panel.classList.add('hidden');
+                    });
+                    filterContent();
+                });
             });
-            showPopup();
+
+            batchFilter.addEventListener('change', filterContent);
+            
+            // Initial check for empty state on load
+            filterContent();
+            
+            // Notification Panel Logic
+            const notificationBtn = document.getElementById('notification-btn');
+            const closeNotificationBtn = document.getElementById('close-notification-btn');
+            const notificationPanel = document.getElementById('notification-panel');
+            const notificationOverlay = document.getElementById('notification-overlay');
+            notificationBtn.addEventListener('click', () => {
+                notificationPanel.classList.remove('translate-x-full');
+                notificationOverlay.classList.remove('hidden');
+            });
+            closeNotificationBtn.addEventListener('click', () => {
+                notificationPanel.classList.add('translate-x-full');
+                notificationOverlay.classList.add('hidden');
+            });
+            notificationOverlay.addEventListener('click', () => {
+                 notificationPanel.classList.add('translate-x-full');
+                notificationOverlay.classList.add('hidden');
+            });
+
+            // Popup Logic
+            const popup = document.getElementById('telegram-popup');
+            setTimeout(() => {
+                const popupContent = document.getElementById('popup-content');
+                popup.style.display = 'flex';
+                popupContent.classList.remove('scale-95', 'opacity-0');
+                popupContent.classList.add('scale-100', 'opacity-100');
+            }, 500);
+            document.getElementById('close-popup-btn').addEventListener('click', () => popup.style.display = 'none');
+
+            // Auto-refresh the page every 60 seconds to get new server-rendered content
+            setTimeout(() => { window.location.reload(); }, 60000);
         });
     </script>
 </body>
 </html>`;
-}
+};
 
-// --- Express Routes ---
+/**
+ * CACHE UPDATE LOGIC
+ * This function runs periodically to refresh the data and rebuild the HTML.
+ */
+const updateCache = async () => {
+    console.log('Updating cache...');
+    try {
+        const [live, up, completed, notifications] = await Promise.all([
+            fetchApiData('Live/?get=live'),
+            fetchApiData('Live/?get=up'),
+            fetchApiData('Live/?get=completed'),
+            fetchApiData('?get=notifications')
+        ]);
+
+        cachedHtml = buildFullHtmlPage(live, up, completed, notifications);
+        console.log('Cache updated successfully.');
+    } catch (error) {
+        console.error('Failed to update cache:', error);
+    }
+};
+
+// --- SERVER SETUP ---
 app.get('/', (req, res) => {
-    // Generate and send the complete HTML page
-    res.send(generateHTML());
+    res.send(cachedHtml);
 });
 
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', lastUpdated: cachedData.lastUpdated });
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+    // Immediately update cache on start, then set interval.
+    updateCache();
+    setInterval(updateCache, 60000); // 60 seconds
 });
-
-
-// --- Server Initialization ---
-cron.schedule('*/1 * * * *', updateData); // Fetch data every minute
-
-// Initial data fetch on server start
-updateData();
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server listening on http://0.0.0.0:${PORT}`);
-});
-
-
-
-
-
