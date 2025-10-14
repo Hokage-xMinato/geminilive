@@ -136,6 +136,12 @@ const buildFullHtmlPage = (live, up, completed, notifications) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Study Smarterz - Live Classes</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-E7FMZ2D4HH');
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
