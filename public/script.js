@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closePopupButton = document.getElementById('close-popup');
     const joinTelegramBtn = document.getElementById('join-telegram-btn');
 
-    // --- Popup Logic ---
+    
     const showPopup = () => {
         // Show popup only if it hasn't been shown before in this session
         if (!sessionStorage.getItem('telegramPopupShown')) {
