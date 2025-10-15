@@ -316,10 +316,10 @@ const updateCache = async () => {
     console.log('Updating cache...');
     try {
         const [live, up, completed, notifications] = await Promise.all([
-            fetchApiData('Live/?get=live'),
-            fetchApiData('Live/?get=up'),
-            fetchApiData('Live/?get=completed'),
-            fetchApiData('Live/?get=notifications')
+            fetchApiData('?get=live'),
+            fetchApiData('?get=up'),
+            fetchApiData('?get=completed'),
+            fetchApiData('?get=notifications')
         ]);
 
         cachedHtml = buildFullHtmlPage(live, up, completed, notifications);
