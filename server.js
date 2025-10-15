@@ -20,7 +20,7 @@ const textReplacer = (text) => {
 };
 
 const fetchApiData = async (endpoint) => {
-    const url = `https://api.rolexcoderz.live/${endpoint}`;
+    const url = `https://live.rolexcoderz.live/${endpoint}`;
     try {
         const response = await fetch(url, { timeout: 10000 });
         if (!response.ok) {
