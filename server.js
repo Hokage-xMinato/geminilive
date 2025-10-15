@@ -50,15 +50,35 @@ const renderLectureCards = (data) => {
 
         let imageHtml = '';
         let isImageValid = false;
+        let finalImageUrl = item.image; // Use a variable for the final URL
+
         if (item.image) {
             try {
                 const imageUrl = new URL(item.image);
+
+                // Condition 1 (Original): Check for CloudFront domain
                 if (imageUrl.hostname.endsWith('cloudfront.net')) {
                     isImageValid = true;
-                    imageHtml = `<img src="${item.image}" alt="${title}" class="h-40 w-full object-cover" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML = '<div class=\'h-40 w-full bg-slate-200 flex items-center justify-center p-4 text-center font-semibold text-slate-600\'>${title}</div>';">`;
+                    // finalImageUrl is already correct
                 }
-            } catch (e) { /* Invalid URL */ }
+                // Condition 2 (NEW): Check for rolexcoderz.live/images/ and transform the URL
+                else if (imageUrl.hostname === 'rolexcoderz.live' && imageUrl.pathname.startsWith('/images/')) {
+                    // Extract the image name from the path (e.g., 'image.png' from '/images/image.png')
+                    const imageName = imageUrl.pathname.substring('/images/'.length);
+                    // Construct the new URL
+                    finalImageUrl = `https://smartrzimages.onrender.com/img/${imageName}`;
+                    isImageValid = true;
+                }
+
+                // If any of the above conditions passed, create the img tag
+                if (isImageValid) {
+                    imageHtml = `<img src="${finalImageUrl}" alt="${title}" class="h-40 w-full object-cover" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML = '<div class=\'h-40 w-full bg-slate-200 flex items-center justify-center p-4 text-center font-semibold text-slate-600\'>${title}</div>';">`;
+                }
+
+            } catch (e) { /* Invalid URL, isImageValid will remain false */ }
         }
+
+        // Fallback for invalid or non-matching URLs
         if (!isImageValid) {
             imageHtml = `<div class="h-40 w-full bg-slate-200 flex items-center justify-center p-4 text-center font-semibold text-slate-600">${title}</div>`;
         }
