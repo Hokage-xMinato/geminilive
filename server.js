@@ -62,7 +62,8 @@ const renderLectureCards = (data) => {
                     // finalImageUrl is already correct
                 }
                 // Condition 2 (NEW): Check for rolexcoderz.live/images/ and transform the URL
-                else if (imageUrl.hostname === 'rolexcoderz.live' && imageUrl.pathname.startsWith('/images/')) {
+                else if (imageUrl.hostname.endsWith('rolexcoderz.live') && imageUrl.pathname.startsWith('/images/'))
+ {
                     // Extract the image name from the path (e.g., 'image.png' from '/images/image.png')
                     const imageName = imageUrl.pathname.substring('/images/'.length);
                     // Construct the new URL
